@@ -1,0 +1,71 @@
+---
+title: 'Kaggel Competition: Web Traffic Forecasting'
+output:
+  html_notebook: default
+  html_document: default
+---
+
+Kaggle Competition
+https://www.kaggle.com/c/web-traffic-time-series-forecasting 
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      message=FALSE,
+                      warning=FALSE)
+## load typical libraries
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+library(lubridate)
+
+```
+### Get Data
+
+Data sets are available here for download: <br>
+https://www.kaggle.com/c/web-traffic-time-series-forecasting/data
+
+* initial data downloaded from Kaggle:
+    + train_1.csv (265MB)
+    + key_1.csv (711MB)
+
+### Inspect Data
+
+```{r}
+## warning: this takes a long time (10 min or so on Surface)
+# train1 <- read.csv("data-input/train_1.csv", stringsAsFactors = FALSE)
+# key1 <- read.csv("data-input/key_1.csv", stringsAsFactors = FALSE)
+# 
+# head(key1)
+# head(train1)
+```
+
+#### Data Structure
+
+**train:**
+
+* each row has info for one article based on:
+    + article title from URL
+    + locale of wikipedia (en.wikipedia.org, zh.wikipedia.org, etc)
+    + access type (all-access, desktop, etc)
+    + agent (all-agents, spider, etc)
+
+**key:**
+
+* this file has article info with date appended and a corresponding id number
+* i believe only used for uploading data to Kaggle
+
+Due to the size of data, need to take a sample and work with that.
+
+Sample can be based on:
+
+* set of pages
+* incorporate dimensions:
+    + type of access (device?): eg. 'desktop'
+    + 'agent' (source?): eg. 'spider'
+    
+```{r}
+
+```
+
