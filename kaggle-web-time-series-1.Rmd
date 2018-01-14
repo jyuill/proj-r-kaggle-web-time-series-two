@@ -1,8 +1,8 @@
 ---
 title: 'Kaggel Competition: Web Traffic Forecasting'
 output:
-  html_notebook: default
   html_document: default
+  html_notebook: default
 ---
 
 Kaggle Competition
@@ -21,19 +21,23 @@ library(scales)
 library(lubridate)
 
 ```
-### Get Data
+### Data
 
 Data sets are available here for download: <br>
 https://www.kaggle.com/c/web-traffic-time-series-forecasting/data
 
-* initial data downloaded from Kaggle:
+* initial data downloaded from Kaggle and saved in 'data-input' folder:
     + train_1.csv (265MB)
     + key_1.csv (711MB)
+    
+* due to size of dataset, not uploaded to git repository
+* work with sample instead of full data set
 
-### Inspect Data
 
-```{r}
-## warning: this takes a long time (10 min or so on Surface)
+```{r IMPORT AND INSPECT FULL DATA SET}
+## if necessary, data can be downloaded and imported
+## prefer to use small sample as explained further down the file
+## warning: this can take a long time due to file size (10 min or so on MS Surface)
 # train1 <- read.csv("data-input/train_1.csv", stringsAsFactors = FALSE)
 # key1 <- read.csv("data-input/key_1.csv", stringsAsFactors = FALSE)
 # 
@@ -41,31 +45,119 @@ https://www.kaggle.com/c/web-traffic-time-series-forecasting/data
 # head(train1)
 ```
 
-#### Data Structure
+#### Data Structure (and Size)
+
+Information based on full dataset for reference.
 
 **train:**
 
+* 145K rows x 551 vars
 * each row has info for one article based on:
     + article title from URL
     + locale of wikipedia (en.wikipedia.org, zh.wikipedia.org, etc)
     + access type (all-access, desktop, etc)
     + agent (all-agents, spider, etc)
+* cols are dates in format X2015.08.02
 
 **key:**
 
+* 8.7M rows x 2 vars
 * this file has article info with date appended and a corresponding id number
 * i believe only used for uploading data to Kaggle
+
+##### Sampling
 
 Due to the size of data, need to take a sample and work with that.
 
 Sample can be based on:
 
-* set of pages
+* random selection of rows (not so useful in this case)
+* selected pages 
+    + topic?
+    + key words?
 * incorporate dimensions:
+    + locale (en.wikipedia)
     + type of access (device?): eg. 'desktop'
     + 'agent' (source?): eg. 'spider'
     
-```{r}
+First crack:
 
+* filter full train_1.csv for "en.wikipedia" and save
+
+```{r}
+## start with filter for en
+
+# train1.en <- train1 %>% filter(grepl("en.wikipedia", train1$Page, ignore.case=TRUE))
+## looks good - save for future use
+# write.csv(train1.en, "data-input/train-en.csv", row.names=FALSE)
+
+# train.en <- read.csv("data-input/train-en.csv", stringsAsFactors = FALSE)
+```
+* reduces down to 24k rows
+* still 50MB
+
+Second crack:
+
+* select pages (including variations by user agent, etc):
+    + Main page ('Main_Page_en')
+    + Howard Hughes ('Howard_Hughes_en')
+    + Orange is the New Black ('Orange_is_the_New_Black_en')
+    
+```{r SUBJECT FILTER AND SAVE}
+# train.subject <- train.en %>%
+#   filter(grepl("^Main_Page_en|Howard_Hughes_en|Orange_Is_the_New_Black_en", train.en$Page, ignore.case=FALSE))
+# 
+# write.csv(train.subject, "data-input/subject.csv", row.names = FALSE)
+```
+
+* 15 rows
+* 54KB - much better for small computer
+
+* SAVE AND USE
+
+```{r SUBJECT IMPORT}
+subject <- read.csv("data-input/subject.csv", stringsAsFactors=FALSE)
+```
+
+#### WRANGLE SUBJECT DATA
+
+Structure (extended for more date columns):
+
+```{r WRANGLE SUBJECT}
+subject3 <- subject[,c(1:3)]
+str(subject3)
+```
+
+Pages: 
+
+```{r}
+subject <- subject %>% arrange(Page)
+subject$Page
+
+```
+
+3 components to Page:
+
+1. Subject
+2. Access: 'all-access', 'desktop', 'mobile'
+3. Agent: 'all-agents', 'spider'
+
+Note that 'all-access-all-agents' is the total of the other variations.
+
+#### Time Series
+
+Try with one page variation.
+
+```{r MAIN ALL CLEAN}
+main.all.all <- subject %>% filter(Page=="Main_Page_en.wikipedia.org_all-access_all-agents")
+main.all.all.ts <- main.all.all %>% gather(key=date, value=views, -Page)
+main.all.all.ts$date <- sub("X", "", main.all.all.ts$date) 
+main.all.all.ts$date <- as.Date(main.all.all.ts$date, format="%Y.%m.%d")
+```
+
+```{r}
+ggplot(main.all.all.ts, aes(x=date, y=views))+geom_line()+
+  scale_y_continuous(labels=comma, expand=c(0,0))+theme_classic()+
+  ggtitle("Daily Views for Main page - all access, all agents")
 ```
 
