@@ -1,5 +1,5 @@
 ---
-title: 'Kaggel Competition: Web Traffic Forecasting'
+title: 'Time Series Forecasting (based on Kaggle Competition: Web Traffic Forecasting)'
 output:
   html_document: default
   html_notebook: default
@@ -7,6 +7,11 @@ output:
 
 Kaggle Competition
 https://www.kaggle.com/c/web-traffic-time-series-forecasting 
+
+Using Kaggel competition as:
+
+* source of data in related field
+* learn from approaches by others (kernels, etc)
 
 ```{r include=FALSE}
 knitr::opts_chunk$set(echo = FALSE,
@@ -17,11 +22,12 @@ knitr::opts_chunk$set(echo = FALSE,
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(plotly)
 library(scales)
 library(lubridate)
 
 ```
-### Data
+## Data
 
 Data sets are available here for download: <br>
 https://www.kaggle.com/c/web-traffic-time-series-forecasting/data
@@ -45,7 +51,7 @@ https://www.kaggle.com/c/web-traffic-time-series-forecasting/data
 # head(train1)
 ```
 
-#### Data Structure (and Size)
+### Data Structure (and Size)
 
 Information based on full dataset for reference.
 
@@ -65,7 +71,7 @@ Information based on full dataset for reference.
 * this file has article info with date appended and a corresponding id number
 * i believe only used for uploading data to Kaggle
 
-##### Sampling
+#### Sampling
 
 Due to the size of data, need to take a sample and work with that.
 
@@ -119,13 +125,13 @@ Second crack:
 subject <- read.csv("data-input/subject.csv", stringsAsFactors=FALSE)
 ```
 
-#### WRANGLE SUBJECT DATA
+### WRANGLE SUBJECT DATA
 
 Structure (extended for more date columns):
 
 ```{r WRANGLE SUBJECT}
-subject3 <- subject[,c(1:3)]
-str(subject3)
+subject.temp <- subject[,c(1:3)]
+str(subject.temp)
 ```
 
 Pages: 
@@ -144,20 +150,135 @@ subject$Page
 
 Note that 'all-access-all-agents' is the total of the other variations.
 
-#### Time Series
+### Time Series Data Example
 
 Try with one page variation.
 
-```{r MAIN ALL CLEAN}
+```{r MAIN ALL CLEAN, echo=TRUE}
 main.all.all <- subject %>% filter(Page=="Main_Page_en.wikipedia.org_all-access_all-agents")
 main.all.all.ts <- main.all.all %>% gather(key=date, value=views, -Page)
 main.all.all.ts$date <- sub("X", "", main.all.all.ts$date) 
 main.all.all.ts$date <- as.Date(main.all.all.ts$date, format="%Y.%m.%d")
+
+summary(main.all.all.ts)
 ```
 
-```{r}
-ggplot(main.all.all.ts, aes(x=date, y=views))+geom_line()+
+```{r PLOT MAIN ALL, echo=TRUE}
+plot.ts1 <- ggplot(main.all.all.ts, aes(x=date, y=views))+geom_line()+
   scale_y_continuous(labels=comma, expand=c(0,0))+theme_classic()+
   ggtitle("Daily Views for Main page - all access, all agents")
+ggplotly(plot.ts1)
+```
+
+## Time Series Modeling (single time series example)
+
+Take the example of Main page, all access, all agent to build time series model based on single time series.
+
+### Approach 1: Linear Smoothing (Loess)
+
+References:
+
+* http://r-statistics.co/Loess-Regression-With-R.html
+* http://ggplot2.tidyverse.org/reference/geom_smooth.html
+
+Info:
+
+* Loess is short for 'local regression' - it is the most common method for smoothing volatile time series
+* Uses least squares regression on subsets of data (can control how finely grained the subsets are)
+* ggplot2 uses loess as default for geom_smooth when less than 1,000 data points
+* Loess using lots of memory and so is not suitable for huge data sets
+
+#### Analyze (visualize) smoothing models
+
+SAME CHART AS ABOVE WITH LOESS SMOOTHING ADDED (ggplot2 defaults
+)
+```{r PLOT MAIN ALL SMOOTH, echo=TRUE}
+plot.ts1+geom_smooth(method='loess')
+```
+
+* Increase granularity with span (between 0-1, higher is smoother)
+
+```{r PLOT MAIN ALL SMOOTH 2, echo=TRUE}
+plot.ts1+geom_smooth(method='loess', span=0.3)+ggtitle("Same Plot with loess span set lower for more granularity")
+```
+
+* can layer in multiple loess smoothed lines for comparison (confidence intervals removed)
+
+```{r}
+plot.ts1+geom_smooth(formulal='views' ~ 'date', method='loess', span=0.2, color='red', se=FALSE)+
+  geom_smooth(method='loess', span=0.4, color='orange', se=FALSE)+
+  geom_smooth(method='loess', span=0.6, color='green', se=FALSE)+
+  geom_smooth(method='loess', span=0.8, color='purple', se=FALSE)+
+  ggtitle("Same Plot with various smoothing lines (span adjusted, no conf. int.)")
+
+```
+
+### Finding optimal smoothing span
+
+```{r}
+## from: http://r-statistics.co/Loess-Regression-With-R.html
+## produces non-sensical result
+
+# define function that returns the SSE
+calcSSE <- function(x){
+  loessMod <- try(loess('views' ~ 'date', data=main.all.all.ts, span=x), silent=T)
+  res <- try(loessMod$residuals, silent=T)
+  if(class(res)!="try-error"){
+    if((sum(res, na.rm=T) > 0)){
+      sse <- sum(res^2)  
+    }
+  }else{
+    sse <- 99999
+  }
+  return(sse)
+}
+
+# Run optim to find span that gives min SSE, starting at 0.5
+optim.result <- optim(par=c(0.5), calcSSE, method="SANN")
+optim.result
+```
+
+Produces non-sensical result: `r optim.result$par` should be less than 1.
+
+Select span value by discretion, based on eye-balling options in the chart. :)
+
+#### Making a Prediction based on loess model
+
+**NEEDED**
+
+### Approach 2
+
+Reference:
+* http://r-statistics.co/Time-Series-Analysis-With-R.html
+
+#### Convert data from data frame to time series object
+
+* Set up time series so that can apply time series functions for decomposition, etc
+
+```{r TIME SERIES MAIN, echo=TRUE}
+## time series forumlation examples from above reference line
+# ts (inputData, frequency = 4, start = c(1959, 2)) # frequency 4 => Quarterly Data
+# ts (1:10, frequency = 12, start = 1990) # freq 12 => Monthly data. 
+# ts (inputData, start=c(2009), end=c(2014), frequency=1) # Yearly Data
+
+## See Notes below for explanation of frequency
+ts.Main.all.all.wk <- ts(main.all.all.ts$views, frequency=52, start=c(year(min(main.all.all.ts$date)), month(min(main.all.all.ts$date)), day(min(main.all.all.ts$date))))
+
+```
+
+Notes:
+
+* since it is daily data, time series frequency=365 (days in yr)
+* however, because there is total 550 data points, not enough data for seasonality component to be estimated (need at least two iterations)
+    + will get error: "time series has no or less than 2 periods""
+* so...used frequency=52 to treat the time series as weekly data for illustration purposes
+
+#### Decomposition
+
+```{r TIME SERIES MAIN DECOMP}
+decomposedRes <- decompose(ts.Main.all.all.wk, type='additive') ## type='mult' if multiplicative; 'additive' if additive
+plot(decomposedRes)
+
+
 ```
 
