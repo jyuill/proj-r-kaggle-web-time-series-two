@@ -205,7 +205,8 @@ plot.ts1+geom_smooth(method='loess', span=0.3)+ggtitle("Same Plot with loess spa
 * can layer in multiple loess smoothed lines for comparison (confidence intervals removed)
 
 ```{r}
-plot.ts1+geom_smooth(formulal='views' ~ 'date', method='loess', span=0.2, color='red', se=FALSE)+
+plot.ts1+
+  geom_smooth(formula=y ~ x, method='loess', span=0.2, color='red', se=FALSE)+
   geom_smooth(method='loess', span=0.4, color='orange', se=FALSE)+
   geom_smooth(method='loess', span=0.6, color='green', se=FALSE)+
   geom_smooth(method='loess', span=0.8, color='purple', se=FALSE)+
@@ -272,6 +273,9 @@ Notes:
 * however, because there is total 550 data points, not enough data for seasonality component to be estimated (need at least two iterations)
     + will get error: "time series has no or less than 2 periods""
 * so...used frequency=52 to treat the time series as weekly data for illustration purposes
+
+More on 'time series has no or less than 2 periods' error: <br />
+* https://stat.ethz.ch/pipermail/r-help/2013-October/361047.html
 
 #### Decomposition
 
