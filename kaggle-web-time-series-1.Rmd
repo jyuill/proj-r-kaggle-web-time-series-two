@@ -19,9 +19,10 @@ knitr::opts_chunk$set(echo = FALSE,
                       warning=FALSE)
 ## load typical libraries
 
-library(dplyr)
-library(tidyr)
-library(ggplot2)
+library(tidyverse)
+#library(dplyr)
+#library(tidyr)
+#library(ggplot2)
 library(plotly)
 library(scales)
 library(lubridate)
@@ -246,6 +247,15 @@ Select span value by discretion, based on eye-balling options in the chart. :)
 #### Making a Prediction based on loess model
 
 **NEEDED**
+
+```{r Loess prediction}
+## add index
+main.all.all.ts$index <- 1:nrow(main.all.all.ts) 
+loess1 <- loess(views ~ index, data=main.all.all.ts, span=0.3)
+summary(loess1)
+
+```
+
 
 ### Approach 2
 
