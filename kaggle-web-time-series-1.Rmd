@@ -160,6 +160,7 @@ main.all.all <- subject %>% filter(Page=="Main_Page_en.wikipedia.org_all-access_
 main.all.all.ts <- main.all.all %>% gather(key=date, value=views, -Page)
 main.all.all.ts$date <- sub("X", "", main.all.all.ts$date) 
 main.all.all.ts$date <- as.Date(main.all.all.ts$date, format="%Y.%m.%d")
+main.all.all.ts$index <- 1:nrow(main.all.all.ts) ## index for time series data points
 
 summary(main.all.all.ts)
 ```
@@ -221,9 +222,10 @@ plot.ts1+
 ## from: http://r-statistics.co/Loess-Regression-With-R.html
 ## produces non-sensical result
 
-# define function that returns the SSE
+## define function that returns the SSE
+
 calcSSE <- function(x){
-  loessMod <- try(loess('views' ~ 'date', data=main.all.all.ts, span=x), silent=T)
+  loessMod <- try(loess(views ~ index, data=main.all.all.ts, span=0.5), silent=T)
   res <- try(loessMod$residuals, silent=T)
   if(class(res)!="try-error"){
     if((sum(res, na.rm=T) > 0)){
