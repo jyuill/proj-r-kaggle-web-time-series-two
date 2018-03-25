@@ -14,7 +14,7 @@ Using Kaggel competition as:
 * learn from approaches by others (kernels, etc)
 
 ```{r include=FALSE}
-knitr::opts_chunk$set(echo = FALSE,
+knitr::opts_chunk$set(echo = TRUE,
                       message=FALSE,
                       warning=FALSE)
 ## load typical libraries
@@ -26,6 +26,7 @@ library(tidyverse)
 library(plotly)
 library(scales)
 library(lubridate)
+library(forecast)
 
 ```
 ## Data
@@ -41,7 +42,7 @@ https://www.kaggle.com/c/web-traffic-time-series-forecasting/data
 * work with sample instead of full data set
 
 
-```{r IMPORT AND INSPECT FULL DATA SET}
+```{r IMPORT AND INSPECT FULL DATA SET, echo=FALSE}
 ## if necessary, data can be downloaded and imported
 ## prefer to use small sample as explained further down the file
 ## warning: this can take a long time due to file size (10 min or so on MS Surface)
@@ -91,13 +92,13 @@ First crack:
 
 * filter full train_1.csv for "en.wikipedia" and save
 
-```{r}
+```{r, echo=FALSE}
 ## start with filter for en
 
 # train1.en <- train1 %>% filter(grepl("en.wikipedia", train1$Page, ignore.case=TRUE))
-## looks good - save for future use
+# # looks good - save for future use
 # write.csv(train1.en, "data-input/train-en.csv", row.names=FALSE)
-
+# 
 # train.en <- read.csv("data-input/train-en.csv", stringsAsFactors = FALSE)
 ```
 * reduces down to 24k rows
@@ -110,7 +111,7 @@ Second crack:
     + Howard Hughes ('Howard_Hughes_en')
     + Orange is the New Black ('Orange_is_the_New_Black_en')
     
-```{r SUBJECT FILTER AND SAVE}
+```{r SUBJECT FILTER AND SAVE, echo=FALSE}
 # train.subject <- train.en %>%
 #   filter(grepl("^Main_Page_en|Howard_Hughes_en|Orange_Is_the_New_Black_en", train.en$Page, ignore.case=FALSE))
 # 
@@ -128,7 +129,7 @@ subject <- read.csv("data-input/subject.csv", stringsAsFactors=FALSE)
 
 ### WRANGLE SUBJECT DATA
 
-Structure (extended for more date columns):
+Structure (extend for more date columns):
 
 ```{r WRANGLE SUBJECT}
 subject.temp <- subject[,c(1:3)]
@@ -155,20 +156,23 @@ Note that 'all-access-all-agents' is the total of the other variations.
 
 Try with one page variation.
 
-```{r MAIN ALL CLEAN, echo=TRUE}
+```{r MAIN ALL CLEAN}
 main.all.all <- subject %>% filter(Page=="Main_Page_en.wikipedia.org_all-access_all-agents")
 main.all.all.ts <- main.all.all %>% gather(key=date, value=views, -Page)
 main.all.all.ts$date <- sub("X", "", main.all.all.ts$date) 
 main.all.all.ts$date <- as.Date(main.all.all.ts$date, format="%Y.%m.%d")
-main.all.all.ts$index <- 1:nrow(main.all.all.ts) ## index for time series data points
+main.all.all.ts$index <- 1:nrow(main.all.all.ts) ## (not needed) index for time series data points
 
 summary(main.all.all.ts)
+
+write_csv(main.all.all.ts, "data-input/main-all.csv")
+main.all.all.ts <- read_csv("data-input/main-all.csv") ## includes index although not used
 ```
 
-```{r PLOT MAIN ALL, echo=TRUE}
+```{r PLOT MAIN ALL}
+chart.title <- "Daily Views for Main page - all access, all agents"
 plot.ts1 <- ggplot(main.all.all.ts, aes(x=date, y=views))+geom_line()+
-  scale_y_continuous(labels=comma, expand=c(0,0))+theme_classic()+
-  ggtitle("Daily Views for Main page - all access, all agents")
+  scale_y_continuous(labels=comma, expand=c(0,0))+theme_classic()+ggtitle(chart.title)
 ggplotly(plot.ts1)
 ```
 
@@ -180,7 +184,7 @@ Take the example of Main page, all access, all agent to build time series model 
 
 References:
 
-* http://r-statistics.co/Loess-Regression-With-R.html
+* http://r-statistics.co/Loess-Regression-With-R.html (code toward bottom doesn't work)
 * http://ggplot2.tidyverse.org/reference/geom_smooth.html
 
 Info:
@@ -192,72 +196,90 @@ Info:
 
 #### Analyze (visualize) smoothing models
 
-SAME CHART AS ABOVE WITH LOESS SMOOTHING ADDED (ggplot2 defaults
-)
-```{r PLOT MAIN ALL SMOOTH, echo=TRUE}
-plot.ts1+geom_smooth(method='loess')
+SAME CHART AS ABOVE WITH LOESS SMOOTHING ADDED (ggplot2 defaults)
+
+```{r PLOT MAIN ALL SMOOTH}
+chart.title <- "Daily Views with Loess Smoothed Line"
+plot.ts1+geom_smooth(method='loess')+ggtitle(chart.title)
 ```
 
 * Increase granularity with span (between 0-1, higher is smoother)
 
-```{r PLOT MAIN ALL SMOOTH 2, echo=TRUE}
-plot.ts1+geom_smooth(method='loess', span=0.3)+ggtitle("Same Plot with loess span set lower for more granularity")
+```{r PLOT MAIN ALL SMOOTH 2}
+chart.title <- "Same Plot with loess span set lower for more granularity"
+plot.ts1+geom_smooth(method='loess', span=0.3)+ggtitle(chart.title)
 ```
 
 * can layer in multiple loess smoothed lines for comparison (confidence intervals removed)
 
-```{r}
+```{r ALTERNATIVE SMOOTHED LINES}
+chart.title <- "Same Plot with various smoothing lines (span adjusted, no conf. int.)"
 plot.ts1+
   geom_smooth(formula=y ~ x, method='loess', span=0.2, color='red', se=FALSE)+
   geom_smooth(method='loess', span=0.4, color='orange', se=FALSE)+
   geom_smooth(method='loess', span=0.6, color='green', se=FALSE)+
   geom_smooth(method='loess', span=0.8, color='purple', se=FALSE)+
-  ggtitle("Same Plot with various smoothing lines (span adjusted, no conf. int.)")
+  ggtitle(chart.title)
 
 ```
-
-### Finding optimal smoothing span
-
-```{r}
-## from: http://r-statistics.co/Loess-Regression-With-R.html
-## produces non-sensical result
-
-## define function that returns the SSE
-
-calcSSE <- function(x){
-  loessMod <- try(loess(views ~ index, data=main.all.all.ts, span=0.5), silent=T)
-  res <- try(loessMod$residuals, silent=T)
-  if(class(res)!="try-error"){
-    if((sum(res, na.rm=T) > 0)){
-      sse <- sum(res^2)  
-    }
-  }else{
-    sse <- 99999
-  }
-  return(sse)
-}
-
-# Run optim to find span that gives min SSE, starting at 0.5
-optim.result <- optim(par=c(0.5), calcSSE, method="SANN")
-optim.result
-```
-
-Produces non-sensical result: `r optim.result$par` should be less than 1.
-
-Select span value by discretion, based on eye-balling options in the chart. :)
 
 #### Making a Prediction based on loess model
 
-**NEEDED**
+Get loess model from existing data
 
-```{r Loess prediction}
-## add index
-main.all.all.ts$index <- 1:nrow(main.all.all.ts) 
-loess1 <- loess(views ~ index, data=main.all.all.ts, span=0.3)
+```{r LOESS MODEL}
+## Loess model
+## can use 'index' or just convert date to numeric
+loess1 <- loess(views ~ as.numeric(date), data=main.all.all.ts, span=0.3)
 summary(loess1)
 
 ```
 
+Apply Loess model to future time periods
+
+```{r PREDICITON WITH LOESS}
+## extend date range for prediction period
+ndays <- 45 ## number of days to predict
+pred.period <- data.frame(date=seq(min(main.all.all.ts$date),max(main.all.all.ts$date+ndays), by='days'))
+
+## prediction with loess1 doesn't work because default loess doesn't extrapolate 
+#predict(loess1, pred.period, se=TRUE)
+
+## new loess model: add control=...
+sp <- 0.45 ## set span for model: lower number puts more weight on recent
+loess2 <- loess(views ~ as.numeric(date), data=main.all.all.ts, control=loess.control(surface = 'direct'), span=sp)
+
+## plot actual data with fitted data from model
+chart.title <- "Daily Views with Loess Model fitted"
+plot.ts1+geom_line(aes(date, loess2$fitted, color='model'))+ggtitle(chart.title)
+
+## predict with new loess model - extended period
+pr <- predict(loess2, as.numeric(pred.period$date), se=TRUE)
+## prediction (including existing data)
+#pr[[1]] ## first object is prediction
+
+## new data frame with dates and prediction
+prediction <- pred.period %>% mutate(views.pred=pr[[1]])
+
+## join date rate for prediction with existing data
+main.pred <- left_join(prediction, main.all.all.ts, by='date') %>% select(-index)
+
+## plot the result
+chart.title <- "Daily Views for Main Page with Loess Model Prediction"
+plot.ts2 <- ggplot(main.pred, aes(x=date, y=views))+geom_line()+
+  scale_y_continuous(labels=comma, expand=c(0,0))+theme_classic()+
+  ggtitle(chart.title)+geom_line(aes(date, views.pred, color='model+prediction'))
+ggplotly(plot.ts2)
+
+```
+
+Span: `r sp`
+Number of days predicted: `r ndays`
+
+#### Conclusion
+
+* Loess is great for smoothing a line to highlight general pattern
+* maybe not great for time series prediction - subject to manipulation
 
 ### Approach 2
 
@@ -268,13 +290,16 @@ Reference:
 
 * Set up time series so that can apply time series functions for decomposition, etc
 
-```{r TIME SERIES MAIN, echo=TRUE}
-## time series forumlation examples from above reference line
+```{r TIME SERIES MAIN}
+## time series forumlation examples from above reference
 # ts (inputData, frequency = 4, start = c(1959, 2)) # frequency 4 => Quarterly Data
 # ts (1:10, frequency = 12, start = 1990) # freq 12 => Monthly data. 
 # ts (inputData, start=c(2009), end=c(2014), frequency=1) # Yearly Data
 
-## See Notes below for explanation of frequency
+## Convert data frame to time series: daily frequency
+ts.Main <- ts(main.all.all.ts$views, frequency=365, start=c(year(min(main.all.all.ts$date)), month(min(main.all.all.ts$date)), day(min(main.all.all.ts$date))))
+
+## Alternate: See Notes below for explanation of frequency
 ts.Main.all.all.wk <- ts(main.all.all.ts$views, frequency=52, start=c(year(min(main.all.all.ts$date)), month(min(main.all.all.ts$date)), day(min(main.all.all.ts$date))))
 
 ```
@@ -285,15 +310,60 @@ Notes:
 * however, because there is total 550 data points, not enough data for seasonality component to be estimated (need at least two iterations)
     + will get error: "time series has no or less than 2 periods""
 * so...used frequency=52 to treat the time series as weekly data for illustration purposes
+* (great for illustrative purposes but might be hard to get a reliable prediction)
 
 More on 'time series has no or less than 2 periods' error: <br />
 * https://stat.ethz.ch/pipermail/r-help/2013-October/361047.html
 
 #### Decomposition
 
+Using 'decompose'
+
 ```{r TIME SERIES MAIN DECOMP}
 decomposedRes <- decompose(ts.Main.all.all.wk, type='additive') ## type='mult' if multiplicative; 'additive' if additive
 plot(decomposedRes)
+
+```
+
+Using 'stl'
+
+```{r TIME SERIES MAIN STL}
+
+stl.style <- stl(ts.Main.all.all.wk, s.window='periodic')
+plot(stl.style)
+
+```
+
+#### Prediction
+
+https://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/
+
+Reverting back to original data and forging ahead with prediction.
+
+```{r PREDICTION 2}
+## back to daily data even though less than 2 periods
+ts.Mainforecast <- HoltWinters(ts.Main, beta=FALSE, gamma=FALSE)
+ts.Mainforecast
+```
+
+* alpha close to 1 means heavy weighting on recent (needs confirmation)
+
+```{r}
+plot(ts.Mainforecast)
+```
+
+* plotting forecast against actual
+
+#### Forecast
+
+```{r}
+## requires 
+library(forecast)
+library(stats)
+ts.Mainforecast2 <- forecast(ts.Mainforecast, h=45) ## don't need forecast.HoltWinters()
+ts.Mainforecast2
+
+plot(ts.Mainforecast2)
 
 
 ```
