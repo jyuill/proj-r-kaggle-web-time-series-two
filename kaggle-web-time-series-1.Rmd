@@ -368,3 +368,46 @@ plot(ts.Mainforecast2)
 
 ```
 
+### Time Series Modeling
+
+Based on lecture by Prof Rob Hyndman
+* https://www.youtube.com/watch?v=1Lh1HlBUf8k&t=2827s 
+* https://robjhyndman.com/seminars/melbournerug/
+
+Exponential Smoothing
+
+```{r TIME SERIES ETS}
+## doesn't accept frequency > 24
+ts.Main.mth <- ts(main.all.all.ts$views, frequency=12, start=c(year(min(main.all.all.ts$date)), month(min(main.all.all.ts$date))))
+fit <- ets(ts.Main.mth)
+fcast1 <- forecast(fit, h=24)
+plot(fcast1)
+```
+
+Auto-arima
+
+```{r TIME SERIES AUTO-ARIMA}
+fit2 <- ets(ts.Main.mth)
+fcast2 <- forecast(fit2, h=24)
+plot(fcast2)
+
+```
+
+### Time-series: High Frequency with Forecast
+
+* same source as above
+* stl will take high frequency data but needs more than 1 period
+    + daily data has frequency=365 (fine) but only 562 instances, so less than 2 complete cycles
+* stlf produces forecast taking into account seasonality
+
+```{r TIME SERIES STLF}
+## decomposition
+stl.seas <- stl(ts.Main.all.all.wk, s.window=7) ## not sure why '7'? shown in example
+plot(stl.seas)
+
+## forecast using stlf
+fcast <- stlf(ts.Main.all.all.wk)
+plot(fcast)
+
+```
+
